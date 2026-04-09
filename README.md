@@ -1,5 +1,5 @@
 # Probablity-of-Default-pd-
-## 📊 Probability of Default (PD) Model
+##  Probability of Default (PD) Model
 
 The Probability of Default (PD) model was developed to estimate the likelihood that a borrower will default on a loan. The target variable used for this model is `loan_status`, where a value of 1 indicates default and 0 indicates non-default. Given the binary nature of the outcome, a logistic regression model was implemented as a baseline approach for classification.
 
