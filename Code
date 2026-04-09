@@ -1,0 +1,158 @@
+# Data manipulation
+library(dplyr)
+library(tidyr)
+
+# Visualization
+library(ggplot2)
+
+# Modeling
+library(caret)
+library(glmnet)
+
+# Evaluation
+library(pROC)
+
+# Handling categorical variables
+library(forcats)
+
+# Optional (for better tables)
+library(data.table)
+
+summary(credit_risk_dataset)
+str(credit_risk_dataset)
+
+#calculating missing values
+colSums(is.na(credit_risk_dataset))
+
+##Replacing missing values with median
+credit_risk_dataset$loan_int_rate[is.na(credit_risk_dataset$loan_int_rate)] <- median(credit_risk_dataset$loan_int_rate, na.rm = TRUE)
+
+##Removing Unreal Values
+credit_risk_dataset <- credit_risk_dataset %>%
+  filter(person_age >= 18 & person_age <= 99)
+
+credit_risk_dataset <- credit_risk_dataset %>%
+  filter(person_emp_length >= 0 & person_emp_length <= 40)
+# Now all the Na valuees are gone###
+
+
+# Now we convert characters to factors
+credit_risk_dataset <- credit_risk_dataset %>%
+  mutate(
+    person_home_ownership = as.factor(person_home_ownership),
+    loan_intent = as.factor(loan_intent),
+    loan_grade = as.factor(loan_grade),
+    cb_person_default_on_file = as.factor(cb_person_default_on_file)
+  )
+
+## checking pd target var
+
+table(credit_risk_dataset$loan_status)
+
+## creating new cleaned dataset
+clean_data <- credit_risk_dataset
+summary(clean_data)
+str(clean_data)
+
+## Exploratory Data Analysis
+table(clean_data$loan_status)
+prop.table(table(clean_data$loan_status))
+
+ggplot(clean_data, aes(x = factor(loan_status))) +
+  geom_bar() +
+  labs(title = "Default Distribution", x = "Loan Status", y = "Count")
+
+#income VS default 
+ggplot(clean_data, aes(x = factor(loan_status), y = person_income, fill = factor(loan_status))) +
+  geom_boxplot(alpha = 0.7, outlier.color = "red") +
+  coord_cartesian(ylim = c(0, 200000)) +
+  scale_fill_manual(values = c("#4CAF50", "#F44336")) +
+  labs(
+    title = "Income Distribution by Loan Status",
+    subtitle = "Comparison of income between defaulters and non-defaulters",
+    x = "Loan Status (0 = No Default, 1 = Default)",
+    y = "Annual Income"
+  ) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    legend.position = "none"
+  )
+##loan amount vs default
+
+ggplot(clean_data, aes(x = factor(loan_status), y = loan_amnt, fill = factor(loan_status))) +
+  geom_boxplot(alpha = 0.7) +
+  scale_fill_manual(values = c("#2196F3", "#FF9800")) +
+  labs(
+    title = "Loan Amount vs Default",
+    x = "Loan Status",
+    y = "Loan Amount"
+  ) +
+  theme(legend.position = "none")
+
+
+ggplot(clean_data, aes(x = factor(loan_status), y = person_income, fill = factor(loan_status))) +
+  geom_violin(alpha = 0.6) +
+  coord_cartesian(ylim = c(0, 200000)) +
+  scale_fill_manual(values = c("#4CAF50", "#F44336")) +
+  labs(title = "Income Distribution (Violin Plot)")
+
+ggplot(clean_data, aes(x = person_income, y = loan_amnt, color = factor(loan_status))) +
+  geom_point(alpha = 0.5) +
+  scale_color_manual(values = c("#4CAF50", "#F44336")) +
+  labs(title = "Income vs Loan Amount")
+
+ggplot(clean_data, aes(x = loan_intent, fill = factor(loan_status))) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c("#4CAF50", "#F44336")) +
+  labs(title = "Default Rate by Loan Intent", y = "Proportion") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+
+ggplot(clean_data, aes(x = loan_grade, y = loan_amnt, fill = loan_grade)) +
+  geom_boxplot() +
+  labs(title = "Loan Amount by Grade")
+
+library(corrplot)
+
+num_data <- clean_data %>%
+  select(person_age, person_income, loan_amnt, loan_int_rate, loan_percent_income, cb_person_cred_hist_length)
+
+cor_matrix <- cor(num_data)
+
+corrplot(cor_matrix, method = "color", tl.cex = 0.8)
+
+
+
+#####PD Model##############
+#train test split
+set.seed(123)
+
+train_index <- createDataPartition(clean_data$loan_status, p = 0.7, list = FALSE)
+
+train_data <- clean_data[train_index, ]
+test_data  <- clean_data[-train_index, ]
+
+##Regression Model
+pd_model <- glm(loan_status ~ person_income + person_emp_length +
+                  loan_amnt + loan_int_rate + loan_percent_income +
+                  cb_person_cred_hist_length +
+                  person_home_ownership + loan_intent + loan_grade,
+                
+                data = train_data,
+                family = binomial)
+summary(pd_model)
+
+#predict probablity
+test_data$pd_prob <- predict(pd_model, newdata = test_data, type = "response")
+test_data$pd_pred <- ifelse(test_data$pd_prob > 0.3, 1, 0)
+confusionMatrix(as.factor(test_data$pd_pred), as.factor(test_data$loan_status))
+
+
+
+roc_obj <- roc(test_data$loan_status, test_data$pd_prob)
+
+plot(roc_obj, col = "blue", main = "ROC Curve")
+
+auc(roc_obj)
